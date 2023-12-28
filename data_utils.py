@@ -58,13 +58,13 @@ def mdice_across_class(dice_dict,epmty_idx):
     count = 0 
     sum = 0
     for val in dice_dict.values():
-        if not math.isnan(val):
+        if not val==999999: 
             count += 1
             sum += val
     return sum / count
     
     
-def generate_prompt(input_label,point,bbox,bbox_margin):
+def generate_prompt(input_label,point,bbox):
     if input_label.sum() == 0: 
         return None, None, None
     if 'center' in point:  #############could be change to more type,i.e., random points or multiple points in task_1, but center point is best in practical, so only adopt center point######### 
@@ -72,27 +72,43 @@ def generate_prompt(input_label,point,bbox,bbox_margin):
         dist = ndimage.distance_transform_edt(input_label)
         val_max, idx_max = dist.max(), dist.argmax()
         center_point = np.array([idx_max % h, idx_max // w], dtype=np.int32)[None,:]
+    elif 'multiple' in point:
+        #############we always use center_point name to represent our point prompt for simplisity
+        h,w = input_label.shape[0],input_label.shape[1]
+        indices_of_ones = np.argwhere(input_label == 1)
+        try:
+            random_sample_indices = np.random.choice(indices_of_ones.shape[0], size=5, replace=False)
+            random_sample_points = indices_of_ones[random_sample_indices]
+            center_point = random_sample_points
+        except:
+            center_point = np.ones((0, 2), dtype=np.int64)
+    elif 'multiple_w_center':
+        h,w = input_label.shape[0],input_label.shape[1]
+        dist = ndimage.distance_transform_edt(input_label)
+        val_max, idx_max = dist.max(), dist.argmax()
+        center_point_origin = np.array([idx_max % h, idx_max // w], dtype=np.int32)[None,:]
+        indices_of_ones = np.argwhere(input_label == 1)
+        random_sample_indices = np.random.choice(indices_of_ones.shape[0], size=5, replace=False)
+        random_sample_points = indices_of_ones[random_sample_indices]
+        center_point = np.vstack((center_point_origin,random_sample_points))
     else:
         center_point = np.ones((0, 2), dtype=np.int64)
     center_label = np.ones((center_point.shape[0], ), dtype=np.int8)
     if center_point.shape[0] == 0:
         center_point = None
         center_label = None
-    if bbox:
-        #box = find_bounding_box(input_label, bbox_margin)
+    if not bbox is None:
         rows, columns = np.where(input_label)
-        y_min, y_max = rows.min(), rows.max() + 1
-        x_min, x_max = columns.min(), columns.max() + 1
-        x_min = max(0, x_min - bbox_margin)
-        y_min = max(0, y_min - bbox_margin)
-        x_max = min(input_label.shape[1], x_max + bbox_margin)
-        y_max = min(input_label.shape[0], y_max + bbox_margin)
+        y_min, y_max = rows.min(), rows.max()
+        x_min, x_max = columns.min(), columns.max()
         bbox = np.array([x_min, y_min, x_max, y_max], dtype=np.int32)
     else:
         bbox = None
+    ########temporaly for debug
+    bbox = None
     return center_point, center_label, bbox
  
-def generate_slices_info(input_label,point,bbox,bbox_margin,classes= None):
+def generate_slices_info(input_label,point,bbox,classes= None):
     classes = list(range(1, 14))
     ######we only exert on all classes
     slices_coords = []
@@ -102,7 +118,7 @@ def generate_slices_info(input_label,point,bbox,bbox_margin,classes= None):
     #########collect all prompta for each class############
     for organ_class in classes:
         selected_label = (input_label == organ_class).astype(np.int8)
-        coords, labels, bbox = generate_prompt(selected_label,point,bbox,bbox_margin)
+        coords, labels, bbox = generate_prompt(selected_label,point,bbox)
         ######skip no prompts class########3
         if coords is None and labels is None and bbox is None:
             #raise ValueError('Shold exist at least one kind of prompt.')
@@ -118,14 +134,14 @@ def generate_slices_info(input_label,point,bbox,bbox_margin,classes= None):
     return slices_classes, slices_coords, slices_labels, slices_boxes  
 
 
-def slice_preporcess(data, labels ,z_batch_range,point,bbox,bbox_margin,classes=None):
+def slice_preporcess(data, labels ,z_batch_range,point,bbox,classes=None):
     transform = ResizeLongestSide(512)
     organ_class_list = []
     slices_input = []
 
     for i in z_batch_range:
         image_i = torch.from_numpy(transform.apply_image(data[..., i])).to('cuda').permute(2, 0, 1).contiguous()
-        gen_classes, slice_coords, slice_labels, slice_box = generate_slices_info(labels[..., i], point, bbox, bbox_margin,classes)
+        gen_classes, slice_coords, slice_labels, slice_box = generate_slices_info(labels[..., i], point, bbox,classes)
         if len(slice_coords) > 0:
             slice_coords = np.stack(slice_coords, axis=0)
         else:
