@@ -117,7 +117,7 @@ def generate_prompt_input(sam: Sam,
 			input_dict_i['point_labels'] = point_labels
 		if box is not None:
 			box = transform.apply_boxes_torch(torch.from_numpy(box).to(sam.device), data.shape[:2])
-			input_dict_i['box'] = box
+			input_dict_i['boxes'] = box
 		sam_input.append(input_dict_i)
 
 	return target_list, sam_input
