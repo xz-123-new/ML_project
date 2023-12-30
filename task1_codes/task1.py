@@ -16,7 +16,6 @@ from segment_anything import sam_model_registry, SamPredictor
 from typing import List, Tuple, Optional, Union
 
 json_path = '../dataset/RawData/dataset_0.json'
-output_path = '../output/task1/result_points.txt'
 data_path = '../dataset/RawData'
 batch_size = 1
 
@@ -119,11 +118,6 @@ if __name__ == '__main__':
         print("Dice scores: ")
         print(dice_dict)
         print(f"mDice:  {utils.compute_mdice(dice_dict)}")
-
-        with open(output_path, "w") as out_file:
-            print("Dice scores: ", file=out_file)
-            print(str(dice_dict), file=out_file)
-            print(f"mDice:  {utils.compute_mdice(dice_dict)}", file=out_file)
 
     print("Start segmentation on validation data...")
     for data_id, (data, label) in enumerate(zip(validation_data, validation_labels)):
