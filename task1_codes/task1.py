@@ -15,15 +15,10 @@ import os.path as osp
 from segment_anything import sam_model_registry, SamPredictor
 from typing import List, Tuple, Optional, Union
 
-
 json_path = '../dataset/RawData/dataset_0.json'
-output_path = '../output/task1/result_multi_points.txt'
+output_path = '../output/task1/result_points.txt'
 data_path = '../dataset/RawData'
 batch_size = 1
-
-point_prompt = ['random', 'center'] # ['center'], [], []
-bbox_prompt = False # False True True
-bbox_margin = 0 # 0 0 50
 
 def get_sam(model_type: str = 'vit_h',
             sam_checkpoint: str = '../sam_vit_h_4b8939.pth',
@@ -60,9 +55,32 @@ if __name__ == '__main__':
     torch.manual_seed(3407)
     torch.cuda.manual_seed_all(3407)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--device', type=str, default='cuda:0')
+    parser.add_argument('--prompt', type=int, default=0)
+    args = parser.parse_args()
+
     training_data, training_labels = load_dataset('training')
     validation_data, validation_labels = load_dataset('validation')
-    sam = utils.get_sam(device='cuda:0')
+    sam = utils.get_sam(device=args.device)
+
+    point_prompt = ['center'] #['random', 'center'] , [], []
+    bbox_prompt = False # False True True
+    bbox_margin = 0 # 0 0 50
+
+    if args.prompt == 1:
+        point_prompt = ['random', 'center']
+        bbox_prompt = False
+        bbox_margin = 0
+    elif args.prompt == 2:
+        point_prompt = []
+        bbox_prompt = True
+        bbox_margin = 0
+    elif args.prompt == 3:
+        point_prompt = []
+        bbox_prompt = True
+        bbox_margin = 50
+
 
     if bbox_prompt:
         print(f"bounding box prompt with margin {bbox_margin}")
@@ -96,7 +114,7 @@ if __name__ == '__main__':
                 continue
             pred = results[target]
             dice_dict[target] = utils.dice_score(pred, truth)
-        
+        torch.cuda.empty_cache()
         
         print("Dice scores: ")
         print(dice_dict)
@@ -134,16 +152,12 @@ if __name__ == '__main__':
                 continue
             pred = results[target]
             dice_dict[target] = utils.dice_score(pred, truth)
+        torch.cuda.empty_cache()
         
         
         print("Dice scores: ")
         print(dice_dict)
         print(f"mDice:  {utils.compute_mdice(dice_dict)}")
-
-        with open(output_path, "w") as out_file:
-            print("Dice scores: ", file=out_file)
-            print(str(dice_dict), file=out_file)
-            print(f"mDice:  {utils.compute_mdice(dice_dict)}", file=out_file)
 
 
 
