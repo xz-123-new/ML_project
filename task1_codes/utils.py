@@ -105,13 +105,7 @@ def load_data(image_path: str) -> np.ndarray:
     # Scale value to range [0, 256)
     min_, max_ = image_data.min(), image_data.max()
     image_data = (image_data - min_) / (max_ - min_) * 256
-    return image_data  # dtype = np.float64
-
-def gray_to_rgb(grayscale_image: np.ndarray) -> np.ndarray:
-    """
-    Convert a grayscale image to an RGB image.
-    """
-    image = np.expand_dims(grayscale_image, axis=2)
+    image = np.expand_dims(image_data, axis=2)
     image = np.repeat(image, 3, axis=2)
     return image.astype(np.uint8)
 

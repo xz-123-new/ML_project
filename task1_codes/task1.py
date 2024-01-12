@@ -41,7 +41,6 @@ def load_dataset(kind):
         print(f'loading {kind}')
         for split_dict in tqdm(config[kind]):
             data = utils.load_data(osp.join(data_path, split_dict['image']))
-            data = utils.gray_to_rgb(data)
             data_all.append(data)
 
             label = utils.load_label(osp.join(data_path, split_dict['label']))
@@ -79,7 +78,6 @@ if __name__ == '__main__':
         point_prompt = []
         bbox_prompt = True
         bbox_margin = 50
-
 
     if bbox_prompt:
         print(f"bounding box prompt with margin {bbox_margin}")
