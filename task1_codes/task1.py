@@ -41,6 +41,7 @@ def load_dataset(kind):
         print(f'loading {kind}')
         for split_dict in tqdm(config[kind]):
             data = utils.load_data(osp.join(data_path, split_dict['image']))
+            data = utils.gray_to_rgb(data)
             data_all.append(data)
 
             label = utils.load_label(osp.join(data_path, split_dict['label']))
@@ -67,22 +68,26 @@ if __name__ == '__main__':
     bbox_margin = 0 # 0 0 50
 
     if args.prompt == 1:
-        point_prompt = ['random', 'center']
+        point_prompt = ['random', 'random', 'random', 'random', 'random']
         bbox_prompt = False
         bbox_margin = 0
     elif args.prompt == 2:
-        point_prompt = []
-        bbox_prompt = True
+        point_prompt = ['random', 'random', 'random', 'random', 'center']
+        bbox_prompt = False
         bbox_margin = 0
     elif args.prompt == 3:
         point_prompt = []
         bbox_prompt = True
         bbox_margin = 50
 
+
     if bbox_prompt:
         print(f"bounding box prompt with margin {bbox_margin}")
-    else:
-        print(f'point_prompt:{point_prompt}')
+    print(f'point_prompt:{point_prompt}')
+    
+    total_dice = {}
+    for target in range(1, 14):
+        total_dice[target] = []   
 
     print("Start segmentation on training data...")
     for data_id, (data, label) in enumerate(zip(training_data, training_labels)):
@@ -111,11 +116,13 @@ if __name__ == '__main__':
                 continue
             pred = results[target]
             dice_dict[target] = utils.dice_score(pred, truth)
-        torch.cuda.empty_cache()
         
         print("Dice scores: ")
         print(dice_dict)
         print(f"mDice:  {utils.compute_mdice(dice_dict)}")
+        for target in range(1, 14):
+            total_dice[target].append(dice_dict[target])
+        torch.cuda.empty_cache()
 
     print("Start segmentation on validation data...")
     for data_id, (data, label) in enumerate(zip(validation_data, validation_labels)):
@@ -144,12 +151,17 @@ if __name__ == '__main__':
                 continue
             pred = results[target]
             dice_dict[target] = utils.dice_score(pred, truth)
-        torch.cuda.empty_cache()
-        
         
         print("Dice scores: ")
         print(dice_dict)
         print(f"mDice:  {utils.compute_mdice(dice_dict)}")
+        for target in range(1, 14):
+            total_dice[target].append(dice_dict[target])
+        torch.cuda.empty_cache()
+
+    print("Dice scores on each organ:")
+    for target in range(1, 14):
+        print(f"Organ {target}: {np.mean(total_dice[target])}")
 
 
 
