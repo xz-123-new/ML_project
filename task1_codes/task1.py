@@ -41,7 +41,6 @@ def load_dataset(kind):
         print(f'loading {kind}')
         for split_dict in tqdm(config[kind]):
             data = utils.load_data(osp.join(data_path, split_dict['image']))
-            data = utils.gray_to_rgb(data)
             data_all.append(data)
 
             label = utils.load_label(osp.join(data_path, split_dict['label']))
