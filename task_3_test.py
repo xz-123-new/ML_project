@@ -46,60 +46,61 @@ if __name__ == '__main__':
     class_total = np.zeros(13)
     correct = 0
     total = 0
-    for i, (data, label) in enumerate(zip(test_data, test_labels)):
-        test_labels_binary = (label[None, ...] == np.arange(14)[:, None, None, None]).astype(np.int8)
-        print(f"Sample {i}:")
-        z_idx_range = list(range(0, data.shape[-1] + 1))
-        segment_3d = []
+    with torch.no_grad():
+        for i, (data, label) in enumerate(zip(test_data, test_labels)):
+            test_labels_binary = (label[None, ...] == np.arange(14)[:, None, None, None]).astype(np.int8)
+            print(f"Sample {i}:")
+            z_idx_range = list(range(0, data.shape[-1] + 1))
+            segment_3d = []
 
-        for idx in tqdm(range(len(z_idx_range) - 1)):
-            z_scope = range(z_idx_range[idx], z_idx_range[idx + 1])
-            if args.grid_prompt:
-                organ_info, slices_input = data_utils.grid_preporcess(
-                    data, label, z_scope, 
-                    args.grid_distance
-                )
-            else:
-                organ_info, slices_input = data_utils.slice_preporcess(
-                    data, label, z_scope, 
-                    args.point, args.bbox
-                )
-            if len(slices_input) == 0:
-                # gradient is always 0, no backward propagation
-                segment_3d.append(np.zeros_like(label[..., z_scope], dtype=np.int8))
+            for idx in tqdm(range(len(z_idx_range) - 1)):
+                z_scope = range(z_idx_range[idx], z_idx_range[idx + 1])
+                if args.grid_prompt:
+                    organ_info, slices_input = data_utils.grid_preporcess(
+                        data, label, z_scope, 
+                        args.grid_distance
+                    )
+                else:
+                    organ_info, slices_input = data_utils.slice_preporcess(
+                        data, label, z_scope, 
+                        args.point, args.bbox
+                    )
+                if len(slices_input) == 0:
+                    # gradient is always 0, no backward propagation
+                    segment_3d.append(np.zeros_like(label[..., z_scope], dtype=np.int8))
+                    torch.cuda.empty_cache()
+                    continue
+                output = sam(slices_input, multimask_output=False)
+                predicted_classes = []
+                for (z, organ_class), out in zip(organ_info, output):
+                    pred_class = out['class_prediction']
+                    gt_class = (torch.tensor(organ_class, dtype = int) - 1).to('cuda')
+                    correct += (pred_class.argmax(dim=1) == gt_class).sum().item()
+                    total += 1
+                    for j in range(13):
+                        class_correct[j] += ((pred_class.argmax(dim=1) == gt_class) * (gt_class == j)).sum().item()
+                        class_total[j] += (gt_class == j).sum().item()
+                    predicted_classes.append((z, 1 + torch.argmax(pred_class, dim=1)))
+                segment_result = np.zeros_like(label[..., z_scope], dtype=np.int8)
+                for out, (z, organ_class) in zip(output, predicted_classes):
+                    out['masks'] = (out['masks'].detach() > sam.mask_threshold).to(torch.int8)
+                    segment_result[:, :, z - z_idx_range[idx]] = (
+                        organ_class[:, None, None, None] * out['masks']
+                    ).max(dim=0).values.cpu().numpy()[0]
+                segment_3d.append(segment_result)
                 torch.cuda.empty_cache()
-                continue
-            output = sam(slices_input, multimask_output=False)
-            predicted_classes = []
-            for (z, organ_class), out in zip(organ_info, output):
-                pred_class = out['class_prediction']
-                gt_class = (torch.tensor(organ_class, dtype = int) - 1).to('cuda')
-                correct += (pred_class.argmax(dim=1) == gt_class).sum().item()
-                total += 1
-                for j in range(13):
-                    class_correct[j] += ((pred_class.argmax(dim=1) == gt_class) * (gt_class == j)).sum().item()
-                    class_total[j] += (gt_class == j).sum().item()
-                predicted_classes.append((z, 1 + torch.argmax(pred_class, dim=1)))
-            segment_result = np.zeros_like(label[..., z_scope], dtype=np.int8)
-            for out, (z, organ_class) in zip(output, predicted_classes):
-                out['masks'] = (out['masks'].detach() > sam.mask_threshold).to(torch.int8)
-                segment_result[:, :, z - z_idx_range[idx]] = (
-                    organ_class[:, None, None, None] * out['masks']
-                ).max(dim=0).values.cpu().numpy()[0]
-            segment_3d.append(segment_result)
-            torch.cuda.empty_cache()
                 
-        segment_result = np.concatenate(segment_3d, axis=-1)
+            segment_result = np.concatenate(segment_3d, axis=-1)
 
-        dice = data_utils.dice_for_all_classes(segment_result, label)
-        dice_dict = {i + 1: dice[i] for i in range(13)}
-        # 输出写入文件
-        with open('output_test_log.txt', 'a') as f:
-            f.write("Dice scores: \n")
-            f.write(str(dice_dict) + '\n')
-            train_dice = data_utils.all_mdice(dice_dict)
-            f.write(f"mDice: {train_dice}\n")
-        torch.cuda.empty_cache()
+            dice = data_utils.dice_for_all_classes(segment_result, label)
+            dice_dict = {i + 1: dice[i] for i in range(13)}
+            # 输出写入文件
+            with open('output_test_log.txt', 'a') as f:
+                f.write("Dice scores: \n")
+                f.write(str(dice_dict) + '\n')
+                train_dice = data_utils.all_mdice(dice_dict)
+                f.write(f"mDice: {train_dice}\n")
+            torch.cuda.empty_cache()
 
     acc = 0.0
     acc = correct / total
