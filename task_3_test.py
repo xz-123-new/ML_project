@@ -105,7 +105,6 @@ if __name__ == '__main__':
     acc = 0.0
     acc = correct / total
     class_acc = class_correct / class_total
-    print(f"Average training mDice: {sum(training_mdice_record) / 20}")
-    print("Class accuracy: {}".format(cla_acc.reshape(-1,1)))
+    print("Class accuracy: {}".format(class_acc.reshape(-1,1)))
     print("accuracy is :{}".format(acc))
 
